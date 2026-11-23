@@ -1,0 +1,349 @@
+fn cell_index(x: f64, y: f64) -> i64 {
+    return i64(y * 10 + x);
+}
+
+fn get_cell(cells: i64, x: f64, y: f64) -> i64 {
+    return array_get(cells, cell_index(x, y));
+}
+
+fn set_cell(cells: i64, x: f64, y: f64, value: i64) -> f64 {
+    return array_set(cells, cell_index(x, y), value);
+}
+
+fn set_color(colors: i64, kind: i64, r: f64, g: f64, b: f64) -> f64 {
+    var start: i64 = kind * i64(3);
+    array_set(colors, start, i64(r));
+    array_set(colors, start + i64(1), i64(g));
+    array_set(colors, start + i64(2), i64(b));
+    return 0;
+}
+
+fn init_colors(colors: i64) -> f64 {
+    set_color(colors, i64(0), 30, 36, 55);
+    set_color(colors, i64(1), 66, 198, 226);
+    set_color(colors, i64(2), 243, 213, 80);
+    set_color(colors, i64(3), 172, 102, 221);
+    set_color(colors, i64(4), 98, 198, 116);
+    set_color(colors, i64(5), 225, 83, 93);
+    set_color(colors, i64(6), 70, 104, 224);
+    set_color(colors, i64(7), 244, 160, 62);
+    return 0;
+}
+
+fn color_component(colors: i64, value: i64, channel: i64) -> f64 {
+    return f64(array_get(colors, value * i64(3) + channel));
+}
+
+fn draw_cell(x: f64, y: f64, value: i64, colors: i64) -> f64 {
+    var px: f64 = 200 + x * 24;
+    var py: f64 = 60 + y * 24;
+    draw_rectangle(px, py, 24, 24,
+                   color_component(colors, value, i64(0)),
+                   color_component(colors, value, i64(1)),
+                   color_component(colors, value, i64(2)));
+    draw_rectangle_lines(px, py, 24, 24, 69, 77, 105);
+    return 0;
+}
+
+fn draw_board(cells: i64, colors: i64) -> f64 {
+    for y in 0 to 20 {
+        for x in 0 to 10 {
+            draw_cell(f64(x), f64(y), get_cell(cells, f64(x), f64(y)), colors);
+        }
+    }
+    return 0;
+}
+
+fn define_shape(shapes: i64, kind: i64,
+                x0: f64, y0: f64, x1: f64, y1: f64,
+                x2: f64, y2: f64, x3: f64, y3: f64) -> f64 {
+    var start: i64 = kind * i64(8);
+    array_set(shapes, start, i64(x0));
+    array_set(shapes, start + i64(1), i64(y0));
+    array_set(shapes, start + i64(2), i64(x1));
+    array_set(shapes, start + i64(3), i64(y1));
+    array_set(shapes, start + i64(4), i64(x2));
+    array_set(shapes, start + i64(5), i64(y2));
+    array_set(shapes, start + i64(6), i64(x3));
+    array_set(shapes, start + i64(7), i64(y3));
+    return 0;
+}
+
+fn init_shapes(shapes: i64) -> f64 {
+    define_shape(shapes, i64(0), 0, 1, 1, 1, 2, 1, 3, 1);
+    define_shape(shapes, i64(1), 1, 0, 2, 0, 1, 1, 2, 1);
+    define_shape(shapes, i64(2), 1, 0, 0, 1, 1, 1, 2, 1);
+    define_shape(shapes, i64(3), 1, 0, 2, 0, 0, 1, 1, 1);
+    define_shape(shapes, i64(4), 0, 0, 1, 0, 1, 1, 2, 1);
+    define_shape(shapes, i64(5), 0, 0, 0, 1, 1, 1, 2, 1);
+    define_shape(shapes, i64(6), 2, 0, 0, 1, 1, 1, 2, 1);
+    return 0;
+}
+
+fn shape_axis(shapes: i64, kind: i64, cell: f64,
+              rotation: f64, axis: f64) -> f64 {
+    var start: i64 = kind * i64(8) + i64(cell) * i64(2);
+    var x: f64 = f64(array_get(shapes, start));
+    var y: f64 = f64(array_get(shapes, start + i64(1)));
+    var limit: f64 = 2;
+    var turns: f64 = rotation;
+
+    if kind < i64(1) {
+        limit = 3;
+    }
+
+    if kind > i64(0) {
+        if kind < i64(2) {
+            turns = 0;
+        }
+    }
+
+    for step in 0 to turns {
+        var new_x: f64 = limit - y;
+        y = x;
+        x = new_x;
+    }
+
+    if axis < 1 {
+        return x;
+    }
+    return y;
+}
+
+fn can_place_piece(cells: i64, shapes: i64, kind: i64,
+                   rotation: f64, x: f64, y: f64) -> f64 {
+    for cell in 0 to 4 {
+        var bx: f64 = x + shape_axis(shapes, kind, f64(cell), rotation, 0);
+        var by: f64 = y + shape_axis(shapes, kind, f64(cell), rotation, 1);
+
+        if bx < 0 {
+            return 0;
+        }
+        if bx > 9 {
+            return 0;
+        }
+        if by < 0 {
+            return 0;
+        }
+        if by > 19 {
+            return 0;
+        }
+        if get_cell(cells, bx, by) > i64(0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+fn draw_piece(shapes: i64, colors: i64, kind: i64,
+              rotation: f64, x: f64, y: f64) -> f64 {
+    for cell in 0 to 4 {
+        var bx: f64 = x + shape_axis(shapes, kind, f64(cell), rotation, 0);
+        var by: f64 = y + shape_axis(shapes, kind, f64(cell), rotation, 1);
+        draw_cell(bx, by, kind + i64(1), colors);
+    }
+    return 0;
+}
+
+fn lock_piece(cells: i64, shapes: i64, kind: i64,
+              rotation: f64, x: f64, y: f64) -> f64 {
+    for cell in 0 to 4 {
+        var bx: f64 = x + shape_axis(shapes, kind, f64(cell), rotation, 0);
+        var by: f64 = y + shape_axis(shapes, kind, f64(cell), rotation, 1);
+        set_cell(cells, bx, by, kind + i64(1));
+    }
+    return 0;
+}
+
+fn is_row_full(cells: i64, y: f64) -> f64 {
+    for x in 0 to 10 {
+        if get_cell(cells, f64(x), y) < i64(1) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+fn copy_row(cells: i64, source_y: f64, destination_y: f64) -> f64 {
+    for x in 0 to 10 {
+        set_cell(cells, f64(x), destination_y, get_cell(cells, f64(x), source_y));
+    }
+    return 0;
+}
+
+fn clear_row(cells: i64, y: f64) -> f64 {
+    for x in 0 to 10 {
+        set_cell(cells, f64(x), y, i64(0));
+    }
+    return 0;
+}
+
+fn clear_lines(cells: i64) -> i64 {
+    var destination_y: f64 = 19;
+    var cleared: i64 = i64(0);
+
+    for offset in 0 to 20 {
+        var source_y: f64 = 19 - f64(offset);
+
+        if is_row_full(cells, source_y) {
+            cleared = cleared + i64(1);
+        } else {
+            if source_y < destination_y {
+                copy_row(cells, source_y, destination_y);
+            }
+            destination_y = destination_y - 1;
+        }
+    }
+
+    for y in 0 to 20 {
+        if f64(y) < destination_y + 1 {
+            clear_row(cells, f64(y));
+        }
+    }
+
+    return cleared;
+}
+
+fn move_piece_x(cells: i64, shapes: i64, kind: i64,
+                rotation: f64, x: f64, y: f64) -> f64 {
+    if is_key_pressed(key_left()) {
+        if can_place_piece(cells, shapes, kind, rotation, x - 1, y) {
+            return x - 1;
+        }
+    }
+    if is_key_pressed(key_right()) {
+        if can_place_piece(cells, shapes, kind, rotation, x + 1, y) {
+            return x + 1;
+        }
+    }
+    return x;
+}
+
+fn rotate_piece(cells: i64, shapes: i64, kind: i64,
+                rotation: f64, x: f64, y: f64) -> f64 {
+    if is_key_pressed(key_up()) {
+        var next: f64 = rotation + 1;
+        if next > 3 {
+            next = 0;
+        }
+        if can_place_piece(cells, shapes, kind, next, x, y) {
+            return next;
+        }
+    }
+    return rotation;
+}
+
+fn fall_or_lock(cells: i64, shapes: i64, kind: i64,
+                rotation: f64, x: f64, y: f64) -> f64 {
+    if can_place_piece(cells, shapes, kind, rotation, x, y + 1) {
+        return y + 1;
+    }
+    lock_piece(cells, shapes, kind, rotation, x, y);
+    return 0 - 1;
+}
+
+fn hard_drop(cells: i64, shapes: i64, kind: i64,
+             rotation: f64, x: f64, y: f64) -> f64 {
+    var landing_y: f64 = y;
+
+    for step in 0 to 20 {
+        if can_place_piece(cells, shapes, kind, rotation, x, landing_y + 1) {
+            landing_y = landing_y + 1;
+        } else {
+            break;
+        }
+    }
+
+    lock_piece(cells, shapes, kind, rotation, x, landing_y);
+    return 0 - 1;
+}
+
+fn next_kind(kind: i64) -> i64 {
+    var next: i64 = kind + i64(1);
+    if next > i64(6) {
+        return i64(0);
+    }
+    return next;
+}
+
+fn draw_frame(cells: i64, shapes: i64, colors: i64,
+              kind: i64, rotation: f64, x: f64, y: f64, game_over: f64, lines: i64) -> f64 {
+    begin_drawing();
+    clear_background(17, 21, 36);
+    draw_text("FALLING BLOCKS", 200, 18, 22, 245, 245, 245);
+    draw_board(cells, colors);
+    draw_text("LINES: " + str(lines), 465, 60, 20, 245, 245, 245);
+
+    if game_over < 1 {
+        draw_piece(shapes, colors, kind, rotation, x, y);
+    } else {
+        draw_text("GAME OVER", 240, 285, 28, 255, 100, 100);
+    }
+
+    end_drawing();
+    return 0;
+}
+
+fn run_game(cells: i64, shapes: i64, colors: i64) -> f64 {
+    var kind: i64 = i64(0);
+    var rotation: f64 = 0;
+    var piece_x: f64 = 3;
+    var piece_y: f64 = 0;
+    var fall_timer: f64 = 0;
+    var interval: f64 = 0.5;
+    var game_over: f64 = 0;
+    var lines: i64 = i64(0);
+
+    for frame in 0 to 1000000000 {
+        if window_should_close() {
+            break;
+        }
+
+        if game_over < 1 {
+            piece_x = move_piece_x(cells, shapes, kind, rotation, piece_x, piece_y);
+            rotation = rotate_piece(cells, shapes, kind, rotation, piece_x, piece_y);
+            if is_key_pressed(key_down()) {
+                piece_y = hard_drop(cells, shapes, kind, rotation, piece_x, piece_y);
+            } else {
+                fall_timer = fall_timer + get_frame_time();
+
+                if fall_timer > interval {
+                    fall_timer = fall_timer - interval;
+                    piece_y = fall_or_lock(cells, shapes, kind, rotation, piece_x, piece_y);
+                }
+            }
+
+            if piece_y < 0 {
+                lines = lines + clear_lines(cells);
+                kind = next_kind(kind);
+                rotation = 0;
+                piece_x = 3;
+                piece_y = 0;
+                fall_timer = 0;
+
+                if can_place_piece(cells, shapes, kind, rotation, piece_x, piece_y) < 1 {
+                    game_over = 1;
+                }
+            }
+        }
+
+        draw_frame(cells, shapes, colors, kind, rotation, piece_x, piece_y, game_over, lines);
+    }
+    return 0;
+}
+
+init_window(640, 600, "Falling Blocks");
+set_target_fps(60);
+
+var cells: i64 = array_create(i64(200));
+var shapes: i64 = array_create(i64(56));
+var colors: i64 = array_create(i64(24));
+
+init_shapes(shapes);
+init_colors(colors);
+run_game(cells, shapes, colors);
+
+array_destroy(colors);
+array_destroy(shapes);
+array_destroy(cells);
+close_window();

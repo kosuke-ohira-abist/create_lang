@@ -1,0 +1,238 @@
+fn load_enemy() -> i64 {
+    var model: i64 = load_model("examples/fps_demo/assets/enemy.glb");
+    load_model_animations(model, "examples/fps_demo/assets/enemy.glb");
+    return model;
+}
+
+fn advance_animation(model: i64, frame: f64, dt: f64) -> f64 {
+    var next_frame: f64 = frame + dt * 30;
+    update_model_animation(model, 2, next_frame);
+    return next_frame;
+}
+
+fn increase_score(score: i64) -> i64 {
+    return score + i64(1);
+}
+
+fn initialize() -> f64 {
+    init_window(960, 540, "Game Demo");
+    set_target_fps(60);
+    disable_cursor();
+    return 0;
+}
+
+fn shutdown(gun_model: i64, enemy_model: i64) -> f64 {
+    unload_model(gun_model);
+    unload_model(enemy_model);
+    enable_cursor();
+    close_window();
+    return 0;
+}
+
+fn input_axis(negative_key: f64, positive_key: f64) -> f64 {
+    var value: f64 = 0;
+    if is_key_down(negative_key) {
+        value = value - 1;
+    }
+    if is_key_down(positive_key) {
+        value = value + 1;
+    }
+    return value;
+}
+
+fn clamp_pitch(pitch: f64) -> f64 {
+    if pitch > 1.5 {
+        return 1.5;
+    }
+    if pitch < -1.5 {
+        return -1.5;
+    }
+    return pitch;
+}
+
+fn update_yaw(yaw: f64) -> f64 {
+    return yaw + get_mouse_delta_x() * 0.003;
+}
+
+fn update_pitch(pitch: f64) -> f64 {
+    return clamp_pitch(pitch - get_mouse_delta_y() * 0.003);
+}
+
+fn normalized_axis(axis: f64, other: f64) -> f64 {
+    var magnitude: f64 = sqrt(axis * axis + other * other);
+    if magnitude > 0 {
+        return axis / magnitude;
+    }
+    return 0;
+}
+
+fn player_forward() -> f64 {
+    var forward: f64 = input_axis(key_s(), key_w());
+    var strafe: f64 = input_axis(key_a(), key_d());
+    return normalized_axis(forward, strafe);
+}
+
+fn player_strafe() -> f64 {
+    var forward: f64 = input_axis(key_s(), key_w());
+    var strafe: f64 = input_axis(key_a(), key_d());
+    return normalized_axis(strafe, forward);
+}
+
+fn enemy_reached_player(camera_x: f64, camera_z: f64, enemy_x: f64, enemy_z: f64) -> f64 {
+    var dx: f64 = camera_x - enemy_x;
+    var dz: f64 = camera_z - enemy_z;
+    if sqrt(dx * dx + dz * dz) < 1.51 {
+        return 1;
+    }
+    return 0;
+}
+
+fn move_player_x(x: f64, yaw: f64, forward: f64, strafe: f64, dt: f64) -> f64 {
+    return x + (sin(yaw) * forward + cos(yaw) * strafe) * 4 * dt;
+}
+
+fn move_player_z(z: f64, yaw: f64, forward: f64, strafe: f64, dt: f64) -> f64 {
+    return z + (sin(yaw) * strafe - cos(yaw) * forward) * 4 * dt;
+}
+
+fn chase_axis(current: f64, difference: f64, distance: f64, dt: f64) -> f64 {
+    if distance < 1.5 {
+        return current;
+    }
+    var step: f64 = 1.5 * dt;
+    var remaining: f64 = distance - 1.5;
+    if step > remaining {
+        step = remaining;
+    }
+    return current + difference / distance * step;
+}
+
+fn chase_enemy_axis(current: f64, other: f64, target: f64, other_target: f64, dt: f64) -> f64 {
+    var difference: f64 = target - current;
+    var other_difference: f64 = other_target - other;
+    var distance: f64 = sqrt(difference * difference + other_difference * other_difference);
+    return chase_axis(current, difference, distance, dt);
+}
+
+fn try_shoot(alive: f64, camera_x: f64, camera_z: f64, yaw: f64, pitch: f64, enemy_x: f64, enemy_z: f64) -> f64 {
+    if alive < 1 {
+        return 0;
+    }
+    if is_mouse_button_pressed(mouse_button_left()) {
+        var direction_x: f64 = cos(pitch) * sin(yaw);
+        var direction_y: f64 = sin(pitch);
+        var direction_z: f64 = 0 - cos(pitch) * cos(yaw);
+        if ray_hits_sphere(camera_x, 1.7, camera_z, direction_x, direction_y, direction_z, enemy_x, 2.0, enemy_z, 1.0) {
+            return 0;
+        }
+    }
+    return alive;
+}
+
+fn spawn_enemy_x(camera_x: f64, yaw: f64, side: f64) -> f64 {
+    return camera_x + sin(yaw) * 8 + cos(yaw) * side * 3;
+}
+
+fn spawn_enemy_z(camera_z: f64, yaw: f64, side: f64) -> f64 {
+    return camera_z - cos(yaw) * 8 + sin(yaw) * side * 3;
+}
+
+fn draw_hud(score: i64, enemy_alive: f64, game_over: f64) -> f64 {
+    draw_circle_2d(480, 270, 3);
+    draw_text("Score: " + str(score), 20, 20, 28);
+    if enemy_alive < 1 {
+        if game_over < 1 {
+            draw_text("NEXT ENEMY...", 20, 55, 22);
+        }
+    }
+    if game_over > 0 {
+        draw_text("GAME OVER", 330, 190, 44);
+        draw_text("Press Esc to quit", 355, 250, 20);
+    }
+    return 0;
+}
+
+fn draw_scene(camera_x: f64, camera_z: f64, yaw: f64, pitch: f64, enemy_model: i64, enemy_x: f64, enemy_z: f64, enemy_alive: f64, gun_model: i64, score: i64, game_over: f64) -> f64 {
+    var look_x: f64 = camera_x + cos(pitch) * sin(yaw);
+    var look_y: f64 = 1.7 + sin(pitch);
+    var look_z: f64 = camera_z - cos(pitch) * cos(yaw);
+
+    begin_drawing();
+    clear_background();
+    begin_mode_3d(camera_x, 1.7, camera_z, look_x, look_y, look_z);
+    if enemy_alive > 0 {
+        var enemy_yaw: f64 = atan2(camera_x - enemy_x, camera_z - enemy_z) * 180 / PI;
+        draw_model_ex(enemy_model, enemy_x, 0, enemy_z, 0, 1, 0, enemy_yaw, 1);
+    }
+    draw_grid(20, 1);
+    end_mode_3d();
+
+    clear_depth_buffer();
+    begin_mode_3d(0, 0, 0, 0, 0, -1);
+    draw_model_ex(gun_model, 0.1, -0.05, -0.25, 0, 1, 0, 0, 0.25);
+    end_mode_3d();
+
+    draw_hud(score, enemy_alive, game_over);
+    end_drawing();
+    return 0;
+}
+
+initialize();
+
+var enemy_model: i64 = load_enemy();
+var gun_model: i64 = load_model("examples/fps_demo/assets/blaster-a.glb");
+var camera_x: f64 = 0;
+var camera_z: f64 = 6;
+var yaw: f64 = 0;
+var pitch: f64 = 0;
+var enemy_x: f64 = 0;
+var enemy_z: f64 = -4;
+var enemy_alive: f64 = 1;
+var respawn_timer: f64 = 0;
+var spawn_side: f64 = 1;
+var game_over: f64 = 0;
+var score: i64 = i64(0);
+var animation_frame: f64 = 0;
+
+for frame in 0 to 1000000000 {
+    if window_should_close() {
+        break;
+    }
+    var dt: f64 = get_frame_time();
+    if game_over < 1 {
+        yaw = update_yaw(yaw);
+        pitch = update_pitch(pitch);
+
+        var forward: f64 = player_forward();
+        var strafe: f64 = player_strafe();
+        camera_x = move_player_x(camera_x, yaw, forward, strafe, dt);
+        camera_z = move_player_z(camera_z, yaw, forward, strafe, dt);
+
+        if enemy_alive > 0 {
+            animation_frame = advance_animation(enemy_model, animation_frame, dt);
+            var next_enemy_x: f64 = chase_enemy_axis(enemy_x, enemy_z, camera_x, camera_z, dt);
+            enemy_z = chase_enemy_axis(enemy_z, enemy_x, camera_z, camera_x, dt);
+            enemy_x = next_enemy_x;
+
+            enemy_alive = try_shoot(enemy_alive, camera_x, camera_z, yaw, pitch, enemy_x, enemy_z);
+            if enemy_alive < 1 {
+                score = increase_score(score);
+                respawn_timer = 1.5;
+            } else {
+                game_over = enemy_reached_player(camera_x, camera_z, enemy_x, enemy_z);
+            }
+        } else {
+            respawn_timer = respawn_timer - dt;
+            if respawn_timer < 0 {
+                enemy_x = spawn_enemy_x(camera_x, yaw, spawn_side);
+                enemy_z = spawn_enemy_z(camera_z, yaw, spawn_side);
+                spawn_side = 0 - spawn_side;
+                enemy_alive = 1;
+                animation_frame = 0;
+            }
+        }
+    }
+    draw_scene(camera_x, camera_z, yaw, pitch, enemy_model, enemy_x, enemy_z, enemy_alive, gun_model, score, game_over);
+}
+
+shutdown(gun_model, enemy_model);
